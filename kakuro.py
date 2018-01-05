@@ -1,6 +1,7 @@
 import numpy as np
 from sympy import *
 from sympy.parsing.sympy_parser import parse_expr
+import pickle
 
 """
 Kakuro game solver.
@@ -243,5 +244,7 @@ def find_combos(S, n, available, picked=[], partial_sum=0):
         remaining = available[i + 1:]
         yield from find_combos(S, n, remaining, picked + [num], partial_sum + num)
 
-kakuro = Kakuro(dummy, clues)
+p119_clues = pickle.load(open("p119.kak", "rb"))
+p119_board = pickle.load(open("p119.game", "rb"))
+kakuro = Kakuro(p119_board, p119_clues)
 squares = kakuro.solve_algebraic()
