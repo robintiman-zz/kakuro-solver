@@ -41,8 +41,20 @@ if args.c and not args.c:
 
 if args.x:
     if args.b:
-        file = open(input("Enter the game name:\n"), "wb)")
-        data = pickle.load(file)
+        file = input("Enter the game name:\n")
+        data = pickle.load(open(file + ".data", "rb"))
         change = input("Enter coordinates and the new value:\n")
         x, y, value = tuple(int(v) for v in change.split())
+        data[x, y] = value
+        pickle.dump(data, open(file + ".data", "wb"))
+        print("Change successful!")
+
+    if args.c:
+        file = input("Enter the game name:\n")
+        data = pickle.load(open(file + ".kak", "rb"))
+        change = input("Enter coordinates and the new clues:\n")
+        x, y, x_clue, y_clue = tuple(int(v) for v in change.split())
+        data[(x,y)] = (x_clue, y_clue)
+        pickle.dump(data, open(file + ".kak", "wb"))
+        print("Change successful!")
         

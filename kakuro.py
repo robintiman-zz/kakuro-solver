@@ -11,12 +11,6 @@ n = number of spots
 S = sum to add up to
 """
 
-NA = -1
-VALUE = 0
-H_SUM = 1
-V_SUM = 2
-D_SUM = 3
-
 dummy = [[-1,-1,-1,-1,-1],
          [-1,-1, 0, 0,-1],
          [-1, 0, 0, 0,-1],
@@ -31,9 +25,17 @@ clues = {(1,2): (4,3), (1,3): (4,4), (2,1): (7,5), (2,2): (7,3), (2,3): (7,4), (
 
 def get_nonzero(values):
     symbols = []
+    new_row = False
+    count = -1
     for value in values:
-        if value != 0:
-            symbols.append(value)
+        if value != 0 and not new_row:
+            symbols[count].append(value)
+        if value != 0 and new_row:
+            symbols.append([value])
+            new_row = False
+            count += 1
+        if value == 0:
+            new_row = True
     return symbols
 
 class Kakuro:
@@ -47,24 +49,6 @@ class Kakuro:
         self.grid = grid
         self.clues = clues
 
-    def validate(self):
-        pass
-
-    def solve(self):
-        """
-        Backtracking algorithm
-        :return: True if solved, False otherwise 
-        """
-        blank_row, blank_col = np.where(self.grid == 0)
-        current_cell = (blank_row[0], blank_col[0])
-        blank_row = blank_row[1:]
-        blank_col = blank_col[1:]
-        current_value = 1
-        iteration_count = 0
-        while len(blank_col) > 0 and len(blank_row) > 0:
-            self.grid[current_cell[0], current_cell[1]] = current_value
-            iteration_count += 1
-
 
     def solve_algebraic(self):
         """
@@ -77,39 +61,32 @@ class Kakuro:
         spreadsheet = zeros(len(self.grid), len(self.grid[0]))
 
         # Fill the symbol matrix
+        # TODO import all available symbols instead
         sym_count = 97 # This is the char code for 'a'
         row_sums = zeros(len(self.grid), 1)
         col_sums = zeros(len(self.grid), 1)
+        sym_multiplier = 1
         for cell in self.get_cell():
             row = cell[0]
             col = cell[1]
             row_clue, col_clue = self.clues[row, col]
             row_sums[row] = row_clue
             col_sums[col] = col_clue
-            spreadsheet[row, col] = Symbol(chr(sym_count))
+            spreadsheet[row, col] = Symbol(chr(sym_count) * sym_multiplier)
             sym_count += 1
+            if sym_count > 122:
+                sym_multiplier += 1
+                sym_count = 97
 
+        pprint(spreadsheet)
         # Build the equations
-        equations = []
-        symbols = []
-        dependencies = []
         for i in range(len(self.grid)):
-            row_syms = get_nonzero(spreadsheet.row(i))
-            col_syms = get_nonzero(spreadsheet.col(i))
-            eqn_row = '+'.join(map(lambda sym: str(sym), row_syms))
-            eqn_col = '+'.join(map(lambda sym: str(sym), col_syms))
-            if row_sums[i] != None and eqn_row != '':
-                eqn_row += '-{}'.format(row_sums[i])
-                dependencies.append(row_syms)
-                equations.append(parse_expr(eqn_row))
-            if col_sums[i] != None and eqn_col != '':
-                eqn_col += '-{}'.format(col_sums[i])
-                dependencies.append(col_syms)
-                equations.append(parse_expr(eqn_col))
-            symbols += row_syms
+            symbols, equations, dependencies = self.build_equations(col_sums, dependencies, equations, i, row_sums, spreadsheet, symbols)
 
         # Solve the equations
-        solution = {e[1] : e[0] for e in zip(list(linsolve(equations, symbols))[0], symbols)}
+        pprint(spreadsheet)
+        system_sol = linsolve(equations, *symbols)[0]
+        solution = {e[1] : e[0] for e in zip(list(system_sol), symbols)}
 
         # Enforce the rules. There are two rules in Kakuro which are translated to inequalities.
         # 1. Only use digits 1 to 9: 0 < a < 10
@@ -144,6 +121,25 @@ class Kakuro:
         pprint(spreadsheet)
         return True
 
+    def build_equations(self, i, sums, spreadsheet, direction):
+        dependencies = []
+        equations = []
+        symbols = []
+        if direction == "row":
+            values = get_nonzero(spreadsheet.row(i))
+        else:
+            values = get_nonzero(spreadsheet.col(i))
+
+        eqn_row = '+'.join(map(lambda sym: str(sym), values))
+        if sums[i] != None and eqn_row != '':
+            eqn_row += '-{}'.format(sums[i])
+            dependencies.append(values)
+            equations.append(parse_expr(eqn_row))
+
+        if direction == "row":
+            symbols += values
+        return dependencies, equations, symbols
+
     def insert_solution(self, solution, spreadsheet):
         for i in range(spreadsheet.shape[0]):
             for j in range(spreadsheet.shape[1]):
@@ -157,92 +153,6 @@ class Kakuro:
                 if self.grid[i][j] == 0:
                     yield (i,j)
 
-    def find_linking_squares(self):
-        # TODO fix
-        linking_squares = []
-        for i in range(len(self.grid)):
-            for j in range(len(self.grid)):
-                if 0 < i < len(self.grid) - 1:
-                    adjacent_row = [i - 1, i + 1]
-                elif i == len(self.grid) - 1:
-                    adjacent_row = [i - 1]
-                else:
-                    adjacent_row = [i + 1]
-
-                if 0 < j < len(self.grid) - 1:
-                    adjacent_col = [j - 1, j + 1]
-                elif j == len(self.grid) - 1:
-                    adjacent_col = [j - 1]
-                else:
-                    adjacent_col = [j + 1]
-
-                adjacent = [self.grid[i, k] for k in adjacent_col]
-                adjacent += [self.grid[k, j] for k in adjacent_row]
-                if np.count_nonzero(adjacent) == len(adjacent) - 2:
-                    linking_squares.append((i, j))
-
-        print(linking_squares)
-        return linking_squares
-
-    def add_variable(self, template):
-        pass
-
-
-    def print_board(self):
-        board = ""
-        for row in self.board:
-            for slot in row:
-                board += "|{}".format(slot.to_string())
-            board += "|\n"
-        print(board)
-
-class Slot:
-
-    def __init__(self, type=NA):
-        self.type = type
-        if type == D_SUM:
-            self.value = (0,0)
-        else:
-            self.value = 0
-
-    def to_string(self):
-        if self.type == NA:
-            return " \ "
-        elif self.type == VALUE:
-            return " {} ".format(self.value)
-        elif self.type == H_SUM:
-            return " \{}".format(self.value)
-        elif self.type == V_SUM:
-            return "{}\ ".format(self.value)
-        else:
-            return "{}\{}".format(self.value[0], self.value[1])
-
-    def get_type(self):
-        return self.type
-
-    def get_value(self):
-        if self.type == VALUE:
-            return self.type
-        else:
-            return False
-
-    def set_value(self, value):
-        if self.type == VALUE:
-            self.value = value
-            return True
-        else:
-            return False
-
-def find_combos(S, n, available, picked=[], partial_sum=0):
-    if partial_sum == S and len(picked) == n:
-        yield picked
-
-    if partial_sum > S or len(picked) > n:
-        return
-
-    for i, num in enumerate(available):
-        remaining = available[i + 1:]
-        yield from find_combos(S, n, remaining, picked + [num], partial_sum + num)
 
 p119_clues = pickle.load(open("p119.kak", "rb"))
 p119_board = pickle.load(open("p119.game", "rb"))
