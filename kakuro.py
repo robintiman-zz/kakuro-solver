@@ -1,6 +1,5 @@
 import numpy as np
-from sympy import Matrix, Symbol, zeros, pprint, ones
-from sympy.solvers.solveset import linsolve
+from sympy import *
 from sympy.parsing.sympy_parser import parse_expr
 
 """
@@ -26,18 +25,8 @@ dummy = [[-1,-1,-1,-1,-1],
 # Key = the position in the grid
 # Value = the clues connected to the cell. (row clue, column clue)
 clues = {(1,2): (4,3), (1,3): (4,4), (2,1): (7,5), (2,2): (7,3), (2,3): (7,4), (3,1): (None,5)}
+# clues = {(1,1)}
 
-horizontal_dummy = [[0,0,0,0,0],
-                    [0,4,0,0,0],
-                    [7,0,0,0,0],
-                    [0,0,0,0,0],
-                    [0,0,0,0,0]]
-
-vertical_dummy = [[0,0,3,4,0],
-                  [0,5,0,0,0],
-                  [0,0,0,0,0],
-                  [0,0,0,0,0],
-                  [0,0,0,0,0]]
 
 def get_nonzero(values):
     symbols = []
@@ -84,18 +73,10 @@ class Kakuro:
         3. Repeat until all cells are filled. 
         :return: True if successful, False otherwise.
         """
-        num_cells = len(self.grid) * len(self.grid[0])
-        symbols = [Symbol(chr(code)) for code in range(97 + num_cells, 96, -1)]
         spreadsheet = zeros(len(self.grid), len(self.grid[0]))
-        # Fill the symbol matrix
-        num_symbols = 0
-        sym_count = 97 # This is the char code for 'a'
-        for cell in self.get_cell():
-            spreadsheet[cell[0], cell[1]] = Symbol(chr(sym_count))
-            num_symbols += 1
-            sym_count += 1
 
-        # Fill the row and column sums to match the symbol matrix
+        # Fill the symbol matrix
+        sym_count = 97 # This is the char code for 'a'
         row_sums = zeros(len(self.grid), 1)
         col_sums = zeros(len(self.grid), 1)
         for cell in self.get_cell():
@@ -104,10 +85,13 @@ class Kakuro:
             row_clue, col_clue = self.clues[row, col]
             row_sums[row] = row_clue
             col_sums[col] = col_clue
+            spreadsheet[row, col] = Symbol(chr(sym_count))
+            sym_count += 1
 
         # Build the equations
         equations = []
         symbols = []
+        dependencies = []
         for i in range(len(self.grid)):
             row_syms = get_nonzero(spreadsheet.row(i))
             col_syms = get_nonzero(spreadsheet.col(i))
@@ -115,17 +99,56 @@ class Kakuro:
             eqn_col = '+'.join(map(lambda sym: str(sym), col_syms))
             if row_sums[i] != None and eqn_row != '':
                 eqn_row += '-{}'.format(row_sums[i])
+                dependencies.append(row_syms)
                 equations.append(parse_expr(eqn_row))
             if col_sums[i] != None and eqn_col != '':
                 eqn_col += '-{}'.format(col_sums[i])
+                dependencies.append(col_syms)
                 equations.append(parse_expr(eqn_col))
             symbols += row_syms
 
         # Solve the equations
-        result = linsolve(equations, *symbols)
+        solution = {e[1] : e[0] for e in zip(list(linsolve(equations, symbols))[0], symbols)}
+
+        # Enforce the rules. There are two rules in Kakuro which are translated to inequalities.
+        # 1. Only use digits 1 to 9: 0 < a < 10
+        # 2. No digits can be repeated for a single clue: a != b
+        # 3. It has to be an integer
+        inequalities = []
+        for dep in dependencies:
+            prev = dep.pop()
+            inequalities += [solution[prev] >= 1, solution[prev] <= 9]
+            for next in dep:
+                inequalities.append(Ne(solution[prev], solution[next]))
+                inequalities += [solution[next] >= 1, solution[next] <= 9]
+                prev = next
+
+        raise NotImplemented
+        # TODO Enter the data for the game at p.119.
+        ineq_sol = solve(inequalities, symbols[4]) # TODO this doesn't work in the general case
+        true_value = None
+        for test_value in range(1,10):
+            if ineq_sol.subs(symbols[4], test_value):
+                true_value = test_value
+
+        if not true_value:
+            print("Solution not found!")
+            return False
+
+        # Solve the rest using the true value(s) for the dependent variable(s)
+        for sym in solution:
+                solution[sym] = solution[sym].subs(symbols[4], true_value)
+
+        self.insert_solution(solution, spreadsheet)
         pprint(spreadsheet)
-        print(result)
         return True
+
+    def insert_solution(self, solution, spreadsheet):
+        for i in range(spreadsheet.shape[0]):
+            for j in range(spreadsheet.shape[1]):
+                value = spreadsheet[i, j]
+                if value != 0:
+                    spreadsheet[i, j] = solution[value]
 
     def get_cell(self):
         for i in range(len(self.grid)):
